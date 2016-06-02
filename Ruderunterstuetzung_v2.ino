@@ -1,5 +1,5 @@
 //
-// Ruderunterstützung v2.0
+// Ruderunterstützung v2.5
 // Autor: Kai Laborenz
 //
 // Steuert zwei Fahrtregler so, dass bei Kurvenfahrt ein Motor langsamer läuft und
@@ -9,7 +9,7 @@
 //
 
 // include the pinchangeint library - see the links in the related topics section above for details
-#include <PinChangeInt.h>
+//#include <PinChangeInt.h>
 #include <Servo.h>
 #include <EEPROM.h>0
 
@@ -18,8 +18,8 @@
 #define RC_MAX 2000
 #define RC_MIN 1000
 
-#define RC_DEADBAND 40
-#define START_MOD 300     // Wert für Ruderausschlag, ab dem die Runderunterstützung beginnt
+#define RC_DEADBAND 20
+#define START_MOD 200     // Wert für Ruderausschlag, ab dem die Runderunterstützung beginnt
 #define MAX_MOD   50      // Wert, an dem die Runderunterstützung maximal ist (Ruder hart BB oder STB)
 
 // Basiswerte für die Steuerung der ESCs
@@ -100,17 +100,47 @@ uint32_t ulProgramModeExitTime = 0;
 float modStb=1;         // Modifikation des ESC-Signals für Steuerbord
 float modBb=1;          // Modifikation des ESC-Signals für Backbord
 
+
+// constants won't change. Used here to set a pin number :
+const int ledPin =  13;      // the number of the LED pin
+
+// Variables will change :
+int ledState = LOW;             // ledState used to set the LED
+
+// Generally, you should use "unsigned long" for variables that hold time
+// The value will quickly become too large for an int to store
+unsigned long previousMillis = 0;        // will store last time LED was updated
+
+// constants won't change :
+const long interval = 100;           // interval at which to blink (milliseconds)
+
+
+// Zum Einblenden der seriellen Debugausgaben
+// die folgende Zeile auskommentieren
+// #define DEBUG
+
+#ifdef DEBUG
+ #define DEBUG_PRINT(x)    Serial.print (x)
+ #define DEBUG_PRINTLN(x)  Serial.println (x)
+#else
+ #define DEBUG_PRINT(x)
+ #define DEBUG_PRINTLN(x) 
+#endif
+
+
 void setup()
 {
   Serial.begin(9600);
   
   Serial.println("Ruderhelfer v2.0");
 
-  // using the PinChangeInt library, attach the interrupts
-  // used to read the channels
-  // todo: bei nur 2 Kanälen wird das nicht benötigt
-  PCintPort::attachInterrupt(SPEED_IN_PIN, calcThrottle,CHANGE); 
-  PCintPort::attachInterrupt(RUDDER_IN_PIN, calcSteering,CHANGE);
+  pinMode(ledPin, OUTPUT);
+
+  // attach the interrupts to read the channels 
+  pinMode(SPEED_IN_PIN, INPUT_PULLUP);
+  pinMode(RUDDER_IN_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(SPEED_IN_PIN), calcThrottle,CHANGE); 
+  attachInterrupt(digitalPinToInterrupt(RUDDER_IN_PIN), calcSteering,CHANGE);
 
   // attach servo objects
   escStb.attach(ESC_STB_PIN);
@@ -169,7 +199,7 @@ void loop()
     // alle Kanäle auf Mittelstellung, dann Programmknopf drücken und
     // 10 Sekunden Zeit zum Bewegen aller Knüppel auf Maximalwerte in beide Richtungen
     
-    ulProgramModeExitTime = millis() + 10000;
+    ulProgramModeExitTime = millis() + 8000;
     gMode = MODE_PROGRAM;
     
     speedMin = RC_NEUTRAL;
@@ -180,8 +210,9 @@ void loop()
     rudderMax = RC_NEUTRAL;
     rudderCenter = rudderIn; 
     
-    Serial.println("Kalibrierung startet");
+    DEBUG_PRINTLN("Kalibrierung startet. Sticks bewegen!");
     delay(20);
+    digitalWrite(ledPin, HIGH);
   }
   
   if(gMode == MODE_PROGRAM)
@@ -194,12 +225,12 @@ void loop()
      
      writeSettingsToEEPROM();
      
-     Serial.println("Kalibrierung beendet");
-     delay(2000);
+     DEBUG_PRINTLN("Kalibrierung beendet");
+     delay(4000);
+     digitalWrite(ledPin, LOW);
    }
    else
    {
-    
      // Maximalwerte für alle Kanäle ermitteln 
      // Speed
      if(speedIn > speedMax && speedIn <= RC_MAX)
@@ -219,39 +250,64 @@ void loop()
      {
        rudderMin = rudderIn;
      }
-   
    }
   }
     
  if(gMode == MODE_RUN)
   { 
+  digitalWrite(ledPin, LOW);  
   if(bUpdateFlags)
   {
     
     if(escBb.readMicroseconds() != rudderIn) // ??
     {
+      
       // Ruder hart Steuerbord
       if (rudderIn > (rudderMax - MAX_MOD)) {
         if (speedIn > speedCenter) { // vorwärts
-          modBb=0.75;
-          modStb=1;
+          modBb=0.85;
+          modStb=1.15;
         }
         else { //rückwärts
-          modStb=0.75;
-          modBb=1;        
+          modStb=0.85;
+          modBb=1.15;        
+        }
+      }    
+      // Ruder Steuerbord
+      else if (rudderIn > (rudderMax - START_MOD)) {
+        if (speedIn > speedCenter) { // vorwärts
+          modBb=0.95;
+          modStb=1.05;
+        }
+        else { //rückwärts
+          modStb=0.95;
+          modBb=1.05;        
         }
       }
+      
       // Ruder hart Backbord
       else if (rudderIn < (rudderMin + MAX_MOD)) {
         if (speedIn > speedCenter) { // vorwärts
-          modBb=1;
-          modStb=0.75;
+          modBb=1.15;
+          modStb=0.85;
         }
         else { //rückwärts
-          modStb=1;
-          modBb=0.75;
+          modStb=1.15;
+          modBb=0.85;
         }
       }
+      // Ruder Backbord
+      else if (rudderIn < (rudderMin + START_MOD)) {
+        if (speedIn > speedCenter) { // vorwärts
+          modBb=1.05;
+          modStb=0.95;
+        }
+        else { //rückwärts
+          modStb=1.05;
+          modBb=0.95;
+        }
+      }
+           
       // Wenn Ruder und Speed beide nahe dem Mittelpunkt sind, wird in den "Auf-der-Stelle"-Modus geschaltet
       else if (((rudderIn > (rudderCenter - RC_DEADBAND)) && (rudderIn < (rudderCenter + RC_DEADBAND))) && (speedIn > (speedCenter - RC_DEADBAND)) && (speedIn < (speedCenter + RC_DEADBAND)))
       {
@@ -267,24 +323,24 @@ void loop()
           
     if(escStb.readMicroseconds() != speedIn) // ??
       {
-        Serial.print(gMode);
-        Serial.print(" | Mod Stb/Bb: ");
-        Serial.print(modStb);
-        Serial.print(" / ");
-        Serial.print(modBb);
-        Serial.print(" | ESCSTB: ");
-        Serial.print(speedIn*modStb);
-        Serial.print(" | ESCBB: ");
-        Serial.println(speedIn*modBb);
+        DEBUG_PRINT(gMode);
+        DEBUG_PRINT(" | Mod Stb/Bb: ");
+        DEBUG_PRINT(modStb);
+        DEBUG_PRINT(" / ");
+        DEBUG_PRINT(modBb);
+        DEBUG_PRINT(" | ESCSTB: ");
+        DEBUG_PRINT(speedIn*modStb);
+        DEBUG_PRINT(" | ESCBB: ");
+        DEBUG_PRINTLN(speedIn*modBb);
         
         // Motoren modifiziert ansteuern
         if (speedIn > speedCenter) {
-          escStb.writeMicroseconds(constrain(speedIn*modStb,1500,2000)); // geht nicht :-(
-          escBb.writeMicroseconds(constrain(speedIn*modBb,1500,2000));
+          escStb.writeMicroseconds(constrain(speedIn*modStb,speedCenter,speedMax));
+          escBb.writeMicroseconds(constrain(speedIn*modBb,speedCenter,speedMax));
         }
         else {
-          escStb.writeMicroseconds(constrain(speedIn*modStb,1000,1500));     
-          escBb.writeMicroseconds(constrain(speedIn*modBb,1000,1500));
+          escStb.writeMicroseconds(constrain(speedIn*modStb,speedMin,speedCenter));     
+          escBb.writeMicroseconds(constrain(speedIn*modBb,speedMin,speedCenter));
         }
         
       }
@@ -295,6 +351,7 @@ void loop()
 
   if(gMode == MODE_TURN)
   {
+    digitalWrite(ledPin, HIGH);
     // Wenn der Speedkanal benutzt wird, zurück zum normalen Fahrmodus schalten
     if ((speedIn < (speedCenter - RC_DEADBAND)) || (speedIn > (speedCenter + RC_DEADBAND)))
       {
@@ -306,11 +363,11 @@ void loop()
       if(bUpdateFlags){
         if(escBb.readMicroseconds() != rudderIn) {
           
-          Serial.print(gMode);
-          Serial.print(" | ESC-Werte: ");
-          Serial.print(rudderIn);
-          Serial.print(" / ");
-          Serial.println(map(rudderIn, 1000,2000,2000,1000));
+          DEBUG_PRINT(gMode);
+          DEBUG_PRINT(" | ESC-Werte: ");
+          DEBUG_PRINT(rudderIn);
+          DEBUG_PRINT(" / ");
+          DEBUG_PRINTLN(map(rudderIn, 1000,2000,2000,1000));
           
           escStb.writeMicroseconds(rudderIn);
           escBb.writeMicroseconds(map(rudderIn, 1000,2000,2000,1000));
@@ -388,19 +445,19 @@ void writeSettingsToEEPROM()
   writeChannelSetting(EEPROM_INDEX_RUDDER_MAX,rudderMax);
   writeChannelSetting(EEPROM_INDEX_RUDDER_CENTER,rudderCenter);
 
-  Serial.print("Speed: ");
-  Serial.print(speedMin);
-  Serial.print(" | ");
-  Serial.print(speedMax);
-  Serial.print(" | ");
-  Serial.println(speedCenter);
+  DEBUG_PRINT("Speed: ");
+  DEBUG_PRINT(speedMin);
+  DEBUG_PRINT(" | ");
+  DEBUG_PRINT(speedMax);
+  DEBUG_PRINT(" | ");
+  DEBUG_PRINTLN(speedCenter);
   
-  Serial.print("Ruder: ");
-  Serial.print(rudderMin);
-  Serial.print(" | ");
-  Serial.print(rudderMax);
-  Serial.print(" | ");
-  Serial.println(rudderCenter);
+  DEBUG_PRINT("Ruder: ");
+  DEBUG_PRINT(rudderMin);
+  DEBUG_PRINT(" | ");
+  DEBUG_PRINT(rudderMax);
+  DEBUG_PRINT(" | ");
+  DEBUG_PRINTLN(rudderCenter);
 }
 
 
