@@ -37,7 +37,7 @@ uint16_t rudderMax = RC_MAX;
 uint16_t rudderCenter = RC_NEUTRAL;
 
 // Eingangspins für RC-Signale
-// todo: Umstellen auf Pin 1 und 2 (interruptfähige Pins) und PinChange-Library entfernen
+// todo: PinChange-Library entfernen
 #define SPEED_IN_PIN 2
 #define RUDDER_IN_PIN 3
 
@@ -115,6 +115,8 @@ void setup()
   // attach servo objects
   escStb.attach(ESC_STB_PIN);
   escBb.attach(ESC_BBB_PIN);
+
+  readSettingsFromEEPROM();
 }
 
 void loop()
@@ -191,7 +193,9 @@ void loop()
      gMode = MODE_RUN;
      
      writeSettingsToEEPROM();
+     
      Serial.println("Kalibrierung beendet");
+     delay(2000);
    }
    else
    {
@@ -228,13 +232,25 @@ void loop()
     {
       // Ruder hart Steuerbord
       if (rudderIn > (rudderMax - MAX_MOD)) {
-        modStb=0.75;
-        modBb=1;
+        if (speedIn > speedCenter) { // vorwärts
+          modBb=0.75;
+          modStb=1;
+        }
+        else { //rückwärts
+          modStb=0.75;
+          modBb=1;        
+        }
       }
       // Ruder hart Backbord
       else if (rudderIn < (rudderMin + MAX_MOD)) {
-        modBb=0.75;
-        modStb=1;
+        if (speedIn > speedCenter) { // vorwärts
+          modBb=1;
+          modStb=0.75;
+        }
+        else { //rückwärts
+          modStb=1;
+          modBb=0.75;
+        }
       }
       // Wenn Ruder und Speed beide nahe dem Mittelpunkt sind, wird in den "Auf-der-Stelle"-Modus geschaltet
       else if (((rudderIn > (rudderCenter - RC_DEADBAND)) && (rudderIn < (rudderCenter + RC_DEADBAND))) && (speedIn > (speedCenter - RC_DEADBAND)) && (speedIn < (speedCenter + RC_DEADBAND)))
@@ -262,8 +278,15 @@ void loop()
         Serial.println(speedIn*modBb);
         
         // Motoren modifiziert ansteuern
-        escStb.writeMicroseconds(speedIn*modStb);
-        escBb.writeMicroseconds(speedIn*modBb);
+        if (speedIn > speedCenter) {
+          escStb.writeMicroseconds(constrain(speedIn*modStb,1500,2000)); // geht nicht :-(
+          escBb.writeMicroseconds(constrain(speedIn*modBb,1500,2000));
+        }
+        else {
+          escStb.writeMicroseconds(constrain(speedIn*modStb,1000,1500));     
+          escBb.writeMicroseconds(constrain(speedIn*modBb,1000,1500));
+        }
+        
       }
   }
 
@@ -287,7 +310,8 @@ void loop()
           Serial.print(" | ESC-Werte: ");
           Serial.print(rudderIn);
           Serial.print(" / ");
-          Serial.print(map(rudderIn, 1000,2000,2000,1000));
+          Serial.println(map(rudderIn, 1000,2000,2000,1000));
+          
           escStb.writeMicroseconds(rudderIn);
           escBb.writeMicroseconds(map(rudderIn, 1000,2000,2000,1000));
         }
