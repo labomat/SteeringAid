@@ -10,15 +10,23 @@
 
 // include the pinchangeint library - see the links in the related topics section above for details
 //#include <PinChangeInt.h>
+
 #include <Servo.h>
-#include <EEPROM.h>0
+#include <EEPROM.h>
+
+
+#include <Wire.h>
+#include <GOFi2cOLED.h>
+
+GOFi2cOLED GOFoled;
+
 
 // Basiswerte für RC-Signale, falls noch keine ermittelt wurden
 #define RC_NEUTRAL 1500
 #define RC_MAX 2000
 #define RC_MIN 1000
 
-#define RC_DEADBAND 20
+#define RC_DEADBAND 40
 #define START_MOD 200     // Wert für Ruderausschlag, ab dem die Runderunterstützung beginnt
 #define MAX_MOD   50      // Wert, an dem die Runderunterstützung maximal ist (Ruder hart BB oder STB)
 
@@ -117,7 +125,7 @@ const long interval = 100;           // interval at which to blink (milliseconds
 
 // Zum Einblenden der seriellen Debugausgaben
 // die folgende Zeile auskommentieren
-// #define DEBUG
+//#define DEBUG
 
 #ifdef DEBUG
  #define DEBUG_PRINT(x)    Serial.print (x)
@@ -127,12 +135,13 @@ const long interval = 100;           // interval at which to blink (milliseconds
  #define DEBUG_PRINTLN(x) 
 #endif
 
+#define DEBUG_OLED
 
 void setup()
 {
   Serial.begin(9600);
   
-  Serial.println("Ruderhelfer v2.0");
+  Serial.println("Ruderhelfer 2.1");
 
   pinMode(ledPin, OUTPUT);
 
@@ -147,6 +156,35 @@ void setup()
   escBb.attach(ESC_BBB_PIN);
 
   readSettingsFromEEPROM();
+  DEBUG_PRINTLN("Startwerte aus EEPROM");
+  DEBUG_PRINT("Speed: ");
+  DEBUG_PRINT(speedMin);
+  DEBUG_PRINT(" | ");
+  DEBUG_PRINT(speedMax);
+  DEBUG_PRINT(" | ");
+  DEBUG_PRINTLN(speedCenter);
+  
+  DEBUG_PRINT("Ruder: ");
+  DEBUG_PRINT(rudderMin);
+  DEBUG_PRINT(" | ");
+  DEBUG_PRINT(rudderMax);
+  DEBUG_PRINT(" | ");
+  DEBUG_PRINTLN(rudderCenter);
+
+  #ifdef DEBUG_OLED
+    GOFoled.init(0x3C);
+    // init done
+    
+    delay(2000);
+    GOFoled.clearDisplay();
+    
+    GOFoled.setTextSize(1);
+    GOFoled.setTextColor(WHITE);
+    GOFoled.setCursor(0,0);
+    GOFoled.println("   Ruderhelfer 2.1");
+  #endif
+  
+  delay(2000);
 }
 
 void loop()
@@ -189,6 +227,21 @@ void loop()
     
     interrupts(); // we have local copies of the inputs, so now we can turn interrupts back on
   }
+  #ifdef DEBUG_OLED
+    GOFoled.setCursor(85,8);
+    GOFoled.print("Mode: ");
+    GOFoled.clearArea(121,8,5,7);
+    GOFoled.print(String(gMode));
+    GOFoled.display();    
+    
+    GOFoled.setCursor(0,16);
+    GOFoled.print("RC in: " );
+    GOFoled.clearArea(40,16,55,7);
+    GOFoled.print(String(speedIn));
+    GOFoled.print(" " );
+    GOFoled.println(String(rudderIn));
+    GOFoled.display();
+  #endif
 
  //
  // Programmodus zum Kalibrieren der Maxima-, Minimal und Nullwerte
@@ -210,7 +263,13 @@ void loop()
     rudderMax = RC_NEUTRAL;
     rudderCenter = rudderIn; 
     
-    DEBUG_PRINTLN("Kalibrierung startet. Sticks bewegen!");
+    DEBUG_PRINTLN("Kalibrierung startet!");
+    
+    #ifdef DEBUG_OLED
+      GOFoled.clearDisplay();
+      GOFoled.setCursor(0,0);
+      GOFoled.print(" Kalibrierung startet" );
+    #endif
     delay(20);
     digitalWrite(ledPin, HIGH);
   }
@@ -226,8 +285,20 @@ void loop()
      writeSettingsToEEPROM();
      
      DEBUG_PRINTLN("Kalibrierung beendet");
-     delay(4000);
+    #ifdef DEBUG_OLED
+      GOFoled.clearDisplay();
+      GOFoled.setCursor(0,0);
+      GOFoled.print("Kalibrierung beendet" );
+    #endif
+    
+     delay(6000);
      digitalWrite(ledPin, LOW);
+     
+     #ifdef DEBUG_OLED
+      GOFoled.clearDisplay();
+      GOFoled.setCursor(0,0);
+      GOFoled.println("   Ruderhelfer 2.1");
+    #endif
    }
    else
    {
@@ -324,25 +395,67 @@ void loop()
     if(escStb.readMicroseconds() != speedIn) // ??
       {
         DEBUG_PRINT(gMode);
+        DEBUG_PRINT(" | IN Speed/Ruder: ");
+        DEBUG_PRINT(speedIn);
+        DEBUG_PRINT(" / ");
+        DEBUG_PRINT(rudderIn);
         DEBUG_PRINT(" | Mod Stb/Bb: ");
         DEBUG_PRINT(modStb);
         DEBUG_PRINT(" / ");
         DEBUG_PRINT(modBb);
-        DEBUG_PRINT(" | ESCSTB: ");
-        DEBUG_PRINT(speedIn*modStb);
-        DEBUG_PRINT(" | ESCBB: ");
-        DEBUG_PRINTLN(speedIn*modBb);
+
+        #ifdef DEBUG_OLED
+          GOFoled.setCursor(0,26);
+          GOFoled.print("Mod Stb/Bb: " );
+          GOFoled.clearArea(60,26,65,7);
+          GOFoled.print(String(modStb));
+          GOFoled.print(" " );
+          GOFoled.println(String(modBb));
+          GOFoled.display();
+        #endif
         
         // Motoren modifiziert ansteuern
         if (speedIn > speedCenter) {
           escStb.writeMicroseconds(constrain(speedIn*modStb,speedCenter,speedMax));
           escBb.writeMicroseconds(constrain(speedIn*modBb,speedCenter,speedMax));
+          
+        DEBUG_PRINT(" | ESCSTB: ");
+        DEBUG_PRINT(constrain(speedIn*modStb,speedCenter,speedMax));
+        DEBUG_PRINT(" | ESCBB: ");
+        DEBUG_PRINTLN(constrain(speedIn*modBb,speedCenter,speedMax));
+        
+        #ifdef DEBUG_OLED
+          GOFoled.setCursor(0,36);
+          GOFoled.print("ESC Stb: " );
+          GOFoled.clearArea(45,36,55,7);
+          GOFoled.println(String(constrain(speedIn*modStb,speedCenter,speedMax)));
+          GOFoled.print("ESC Bb: " );
+          GOFoled.clearArea(45,44,55,7);
+          GOFoled.print(String(constrain(speedIn*modBb,speedCenter,speedMax)));
+          GOFoled.display();
+        #endif
+          
         }
         else {
           escStb.writeMicroseconds(constrain(speedIn*modStb,speedMin,speedCenter));     
           escBb.writeMicroseconds(constrain(speedIn*modBb,speedMin,speedCenter));
+          
+        DEBUG_PRINT(" | ESCSTB: ");
+        DEBUG_PRINT(constrain(speedIn*modStb,speedMin,speedCenter));
+        DEBUG_PRINT(" | ESCBB: ");
+        DEBUG_PRINTLN(constrain(speedIn*modBb,speedMin,speedCenter));
+
+        #ifdef DEBUG_OLED
+          GOFoled.setCursor(0,36);
+          GOFoled.print("ESC Stb: " );
+          GOFoled.clearArea(45,36,75,7);
+          GOFoled.println(String(constrain(speedIn*modStb,speedCenter,speedMax)));
+          GOFoled.print("ESC Bb: " );
+          GOFoled.clearArea(45,44,75,7);
+          GOFoled.print(String(constrain(speedIn*modBb,speedCenter,speedMax)));
+          GOFoled.display();
+        #endif  
         }
-        
       }
   }
 
@@ -368,6 +481,16 @@ void loop()
           DEBUG_PRINT(rudderIn);
           DEBUG_PRINT(" / ");
           DEBUG_PRINTLN(map(rudderIn, 1000,2000,2000,1000));
+
+          #ifdef DEBUG_OLED
+            GOFoled.setCursor(0,54);
+            GOFoled.print("Turn: " );
+            GOFoled.clearArea(37,54,80,7);
+            GOFoled.print(String(rudderIn));
+            GOFoled.print(" " );
+            GOFoled.print(String(map(rudderIn, 1000,2000,2000,1000)));
+            GOFoled.display();
+          #endif 
           
           escStb.writeMicroseconds(rudderIn);
           escBb.writeMicroseconds(map(rudderIn, 1000,2000,2000,1000));
@@ -458,6 +581,27 @@ void writeSettingsToEEPROM()
   DEBUG_PRINT(rudderMax);
   DEBUG_PRINT(" | ");
   DEBUG_PRINTLN(rudderCenter);
+
+  #ifdef DEBUG_OLED
+    GOFoled.setCursor(0,26);
+    GOFoled.println("Speed: " );
+    GOFoled.print(String(speedMin));
+    GOFoled.print(" " );
+    GOFoled.print(String(speedMax));
+    GOFoled.print(" " );
+    GOFoled.println(String(speedCenter));
+    GOFoled.setCursor(0,44);
+    GOFoled.println("Ruder: " );
+    GOFoled.print(String(rudderMin));
+    GOFoled.print(" " );
+    GOFoled.print(String(rudderMax));
+    GOFoled.print(" " );
+    GOFoled.print(String(rudderCenter));
+    
+    GOFoled.display();
+  #endif 
+
+  
 }
 
 
