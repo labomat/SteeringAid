@@ -294,7 +294,7 @@ void loop()
      delay(6000);
      digitalWrite(ledPin, LOW);
      
-     #ifdef DEBUG_OLED
+    #ifdef DEBUG_OLED
       GOFoled.clearDisplay();
       GOFoled.setCursor(0,0);
       GOFoled.println("   Ruderhelfer 2.1");
@@ -449,10 +449,10 @@ void loop()
           GOFoled.setCursor(0,36);
           GOFoled.print("ESC Stb: " );
           GOFoled.clearArea(45,36,75,7);
-          GOFoled.println(String(constrain(speedIn*modStb,speedCenter,speedMax)));
+          GOFoled.println(String(constrain(speedIn*modStb,speedMin,speedCenter)));
           GOFoled.print("ESC Bb: " );
           GOFoled.clearArea(45,44,75,7);
-          GOFoled.print(String(constrain(speedIn*modBb,speedCenter,speedMax)));
+          GOFoled.print(String(constrain(speedIn*modBb,speedMin,speedCenter)));
           GOFoled.display();
         #endif  
         }
