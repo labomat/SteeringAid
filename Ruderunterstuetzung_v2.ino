@@ -20,7 +20,7 @@
 
 GOFi2cOLED GOFoled;
 
-
+#define VERSION 2.5
 // Basiswerte für RC-Signale, falls noch keine ermittelt wurden
 #define RC_NEUTRAL 1500
 #define RC_MAX 2000
@@ -141,7 +141,7 @@ void setup()
 {
   Serial.begin(9600);
   
-  Serial.println("Ruderhelfer 2.1");
+  Serial.println("Ruderhelfer 2.5");
 
   pinMode(ledPin, OUTPUT);
 
@@ -181,10 +181,32 @@ void setup()
     GOFoled.setTextSize(1);
     GOFoled.setTextColor(WHITE);
     GOFoled.setCursor(0,0);
-    GOFoled.println("   Ruderhelfer 2.1");
+    GOFoled.println("   Ruderhelfer 2.5");
+
+    GOFoled.setCursor(0,8);
+    GOFoled.println("  Werte aus EEPROM");
+    GOFoled.println("Speed: ");
+    GOFoled.print(speedMin);
+    GOFoled.print(" | ");
+    GOFoled.print(speedMax);
+    GOFoled.print(" | ");
+    GOFoled.println(speedCenter);
+    GOFoled.setCursor(0,36);
+    GOFoled.println("Ruder: ");
+    GOFoled.print(rudderMin);
+    GOFoled.print(" | ");
+    GOFoled.print(rudderMax);
+    GOFoled.print(" | ");
+    GOFoled.print(rudderCenter);
+    GOFoled.display();
+    delay(6000);
+
+    GOFoled.clearDisplay();
+    GOFoled.setCursor(0,0);
+    GOFoled.println("   Ruderhelfer 2.5");
   #endif
   
-  delay(2000);
+  
 }
 
 void loop()
