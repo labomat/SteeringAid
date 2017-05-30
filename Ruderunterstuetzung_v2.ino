@@ -8,8 +8,8 @@
 // Mit Unterstützung von rcarduino.blogspot.com
 //
 
-// include the pinchangeint library - see the links in the related topics section above for details
-//#include <PinChangeInt.h>
+//  PinChangeInterrupt-Bibliothek, falls nicht interuptfähige pins verwendet werden
+//  #include <PinChangeInt.h>
 
 #include <Servo.h>
 #include <EEPROM.h>
@@ -26,8 +26,8 @@ GOFi2cOLED GOFoled;
 #define RC_MAX 2000
 #define RC_MIN 1000
 
-#define RC_DEADBAND 40
-#define START_MOD 200     // Wert für Ruderausschlag, ab dem die Runderunterstützung beginnt
+#define RC_DEADBAND 40    // Wert um die Mittelstellung, wo noch nichts passiert
+#define START_MOD 200     // Wert für Ruderausschlag, ab dem die Runderunterstützung beginnt (berechnet vom Vollausschlag)
 #define MAX_MOD   50      // Wert, an dem die Runderunterstützung maximal ist (Ruder hart BB oder STB)
 
 // Basiswerte für die Steuerung der ESCs
@@ -45,15 +45,15 @@ uint16_t rudderMax = RC_MAX;
 uint16_t rudderCenter = RC_NEUTRAL;
 
 // Eingangspins für RC-Signale
-// todo: PinChange-Library entfernen
+// Achtung: Pins müssen Interrupt-Pins sein!
 #define SPEED_IN_PIN 2
 #define RUDDER_IN_PIN 3
 
-// Assign your channel out pins
+// Pins für Ausgangskanäle (ESCs)
 #define ESC_STB_PIN 6
 #define ESC_BBB_PIN 7
 
-#define PROGRAM_PIN 4 // Schalter, um den Programmiermodus zu starten
+#define PROGRAM_PIN 5 // Schalter, um den Programmiermodus zu starten
 #define MODE_PIN 8 // Schalter, um den Betriebmodus umzuschalten
 
 // Servo-Objekte zum Steuern der ESCs
@@ -123,9 +123,9 @@ unsigned long previousMillis = 0;        // will store last time LED was updated
 const long interval = 100;           // interval at which to blink (milliseconds)
 
 
-// Zum Einblenden der seriellen Debugausgaben
-// die folgende Zeile auskommentieren
-//#define DEBUG
+// Zum Einblenden der Debugausgaben über die serielel Schnittstelle
+// die folgende Zeile "einkommentieren"
+#define DEBUG
 
 #ifdef DEBUG
  #define DEBUG_PRINT(x)    Serial.print (x)
@@ -135,6 +135,7 @@ const long interval = 100;           // interval at which to blink (milliseconds
  #define DEBUG_PRINTLN(x) 
 #endif
 
+// Statusmeldungen über das OLED-Display
 #define DEBUG_OLED
 
 void setup()
@@ -319,7 +320,7 @@ void loop()
     #ifdef DEBUG_OLED
       GOFoled.clearDisplay();
       GOFoled.setCursor(0,0);
-      GOFoled.println("   Ruderhelfer 2.1");
+      GOFoled.println("   Ruderhelfer 2.5");
     #endif
    }
    else
@@ -352,7 +353,7 @@ void loop()
   if(bUpdateFlags)
   {
     
-    if(escBb.readMicroseconds() != rudderIn) // ??
+    if(escBb.readMicroseconds() != rudderIn) // wenn sich etwas bei den Signalen ändert (?)
     {
       
       // Ruder hart Steuerbord
